@@ -1,0 +1,9 @@
+<component name="libraryTable">
+  <library name="NetworkTables-3.0.0-20160107.183819-52-desktop">
+    <CLASSES>
+      <root url="jar://$PROJECT_DIR$/lib/NetworkTables-3.0.0-20160107.183819-52-desktop.jar!/" />
+    </CLASSES>
+    <JAVADOC />
+    <SOURCES />
+  </library>
+</component>
