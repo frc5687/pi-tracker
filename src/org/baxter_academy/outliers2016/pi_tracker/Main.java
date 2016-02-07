@@ -62,8 +62,8 @@ public class Main {
             Imgcodecs.imwrite("c:\\opencv\\2.png", hls);
 
             // Filter using HLS lower and upper range
-            Scalar lower = new Scalar(36, 73, 44);
-            Scalar upper = new Scalar(83, 211, 188);
+            Scalar lower = new Scalar(50, 110, 64);
+            Scalar upper = new Scalar(94, 233, 255);
             Core.inRange(hls, lower, upper, filtered);
             Imgcodecs.imwrite("c:\\opencv\\3.png", filtered);
 
@@ -98,7 +98,7 @@ public class Main {
                 networkTable.putNumber("centerY", cy);
 
                 // And log
-                System.out.println(String.format("Width=%1$f, center=%2$f,%3$f", rect.size().width, cx, cy));
+                //System.out.println(String.format("Width=%1$f, center=%2$f,%3$f", rect.size().width, cx, cy));
             }
         }
     }
