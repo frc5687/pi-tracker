@@ -55,22 +55,22 @@ public class Main {
 
             // Capture a frame and write to disk
             camera.read(frame);
-            Imgcodecs.imwrite("c:\\opencv\\1.png", frame);
+            Imgcodecs.imwrite("1.png", frame);
 
             // Convert to HLS color model
             Imgproc.cvtColor(frame, hls, Imgproc.COLOR_BGR2HLS);
-            Imgcodecs.imwrite("c:\\opencv\\2.png", hls);
+            Imgcodecs.imwrite("2.png", hls);
 
             // Filter using HLS lower and upper range
             Scalar lower = new Scalar(36, 73, 44);
             Scalar upper = new Scalar(83, 211, 188);
             Core.inRange(hls, lower, upper, filtered);
-            Imgcodecs.imwrite("c:\\opencv\\3.png", filtered);
+            Imgcodecs.imwrite("3.png", filtered);
 
             // Find the contours...
             List<MatOfPoint> contours = new ArrayList<MatOfPoint>();
             Imgproc.findContours(filtered, contours, cont, Imgproc.RETR_EXTERNAL,  Imgproc.CHAIN_APPROX_SIMPLE);
-            Imgcodecs.imwrite("c:\\opencv\\4.png", cont);
+            Imgcodecs.imwrite("4.png", cont);
 
             // Now find the biggest contour (if any)
             double maxArea = 0;
