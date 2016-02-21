@@ -85,8 +85,8 @@ public class Main {
         NetworkTable.setTeam(team);
 
         // We want the robot code to always look in the same place for output, so we use the same path as GRIP
-        NetworkTable networkTable = NetworkTable.getTable("/GRIP/tracking");
-        ITable inputs;
+        NetworkTable networkTable = NetworkTable.getTable("/PITracker");
+        ITable inputs = null;
 
         // Initialize OpenCV
         System.out.println("Loading OpenCV...");
@@ -112,6 +112,9 @@ public class Main {
         // And set the exposure low (to improve contrast of retro-reflective tape)
         camera.set(15, exposure);
 
+        long targetCenterX =-106;
+        long targetWidth = 162;
+
         int lowerH = 50;
         int lowerL = 110;
         int lowerS = 64;
@@ -123,21 +126,20 @@ public class Main {
         int minArea = 20;
 
         if (networkTable.isConnected()) {
-            if (!networkTable.containsSubTable("inputs")) {
-                inputs = networkTable.getSubTable("inputs");
+            networkTable.putNumber("inputs/HLS_LOWER_H", lowerH);
+            networkTable.putNumber("inputs/HLS_LOWER_L", lowerL);
+            networkTable.putNumber("inputs/HLS_LOWER_S", lowerS);
 
-                inputs.putNumber("HLS_LOWER_H", lowerH);
-                inputs.putNumber("HLS_LOWER_L", lowerL);
-                inputs.putNumber("HLS_LOWER_S", lowerS);
+            networkTable.putNumber("inputs/HLS_UPPER_H", upperH);
+            networkTable.putNumber("inputs/HLS_UPPER_L", upperL);
+            networkTable.putNumber("inputs/HLS_UPPER_S", upperS);
 
-                inputs.putNumber("HLS_UPPER_H", upperH);
-                inputs.putNumber("HLS_UPPER_L", upperL);
-                inputs.putNumber("HLS_UPPER_S", upperS);
+            networkTable.putNumber("inputs/MIN_AREA", minArea);
 
-                inputs.putNumber("MIN_AREA", minArea);
+            networkTable.putNumber("inputs/EXPOSURE", exposure);
 
-                inputs.putNumber("EXPOSURE", exposure);
-            }
+            networkTable.putNumber("inputs/TARGET_WIDTH", targetWidth);
+            networkTable.putNumber("inputs/TARGET_CENTERX", targetCenterX);
         }
 
         boolean first=true;
@@ -145,10 +147,13 @@ public class Main {
         Mat hls = null;
         Mat filtered = null;
         Mat cont = null;
+        if (networkTable.isConnected()) {
+            inputs = networkTable.getSubTable("inputs");
+        }
 
         while (true) {
             long mills = Instant.now().toEpochMilli() + 20;
-            if (networkTable.isConnected()) {
+            if (networkTable.isConnected() && inputs!=null) {
                 inputs = networkTable.getSubTable("inputs");
                 lowerH = (int) inputs.getNumber("HLS_LOWER_H", lowerH);
                 lowerL = (int) inputs.getNumber("HLS_LOWER_L", lowerL);
@@ -159,6 +164,9 @@ public class Main {
                 upperS = (int) inputs.getNumber("HLS_UPPER_S", upperS);
 
                 minArea = (int) inputs.getNumber("MIN_AREA", minArea);
+
+                targetWidth = (long) inputs.getNumber("TARGET_WIDTH", targetWidth);
+                targetCenterX = (long) inputs.getNumber("TARGET_CENTERX", targetCenterX);
 
                 double newExposure = (double) inputs.getNumber("EXPOSURE", exposure);
                 if (newExposure != exposure) {
@@ -224,17 +232,44 @@ public class Main {
                 // And its center point
                 final double cx = rect.x - (frame.width() / 2);
                 final double cy = rect.y - (frame.height() / 2);
+                final int width = rect.width;
 
                 if (networkTable.isConnected()) {
                     // Send it all to NetworkTables
-                    networkTable.putNumber("width", rect.width);
+                    networkTable.putString("TargetSighting", "Sighted");
+                    networkTable.putNumber("width", width);
                     networkTable.putNumber("height", rect.height);
                     networkTable.putNumber("centerX", cx);
                     networkTable.putNumber("centerY", cy);
+                    if (cx<targetCenterX) {
+                        networkTable.putString("TargetCenter", "Left");
+                    } else if (cx>targetCenterX) {
+                        networkTable.putString("TargetCenter", "Right");
+                    } else {
+                        networkTable.putString("TargetCenter", "Centered");
+                    }
+
+                    if (width<targetWidth) {
+                        networkTable.putString("TargetDistance", "Too far");
+                    } else if (width>targetWidth) {
+                        networkTable.putString("TargetDistance", "Too close");
+                    } else {
+                        networkTable.putString("TargetDistance", "In range");
+                    }
+
+                    if (logging) {
+                        System.out.println(String.format("Height=%1$f, Width=%1$f, center=%2$f,%3$f", rect.size().height, rect.size().width, cx, cy));
+                    }
+                }
+            } else {
+                if (networkTable.isConnected()) {
+                    // Send it all to NetworkTables
+                    networkTable.putString("TargetSighting", "Absent");
                 }
                 if (logging) {
-                    System.out.println(String.format("Height=%1$f, Width=%1$f, center=%2$f,%3$f", rect.size().height, rect.size().width, cx, cy));
+                    System.out.println(String.format("Target absent."));
                 }
+
             }
             try {
                 long w = mills - Instant.now().toEpochMilli();
