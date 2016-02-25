@@ -83,10 +83,16 @@ public class Main {
         // Initialize the NetworkTable library with team information
         NetworkTable.setClientMode();
         NetworkTable.setTeam(team);
-
         // We want the robot code to always look in the same place for output, so we use the same path as GRIP
-        NetworkTable networkTable = NetworkTable.getTable("/PITracker");
-        ITable inputs = null;
+        NetworkTable tracking = NetworkTable.getTable("PITracker/tracking");
+        NetworkTable inputs = NetworkTable.getTable("PITracker/inputs");
+
+        // tracking.putString("Test2", "Show you!!!!!");
+        // tracking.setPersistent("Test2");
+
+        // if (tracking.isConnected()) {
+        //     inputs = tracking.getSubTable("inputs");
+        //}
 
         // Initialize OpenCV
         System.out.println("Loading OpenCV...");
@@ -113,7 +119,10 @@ public class Main {
         camera.set(15, exposure);
 
         long targetCenterX =-106;
-        long targetWidth = 162;
+        long targetWidth = 148;
+
+        long toleranceX = 10;
+        long toleranceWidth = 10;
 
         int lowerH = 50;
         int lowerL = 110;
@@ -125,21 +134,21 @@ public class Main {
 
         int minArea = 20;
 
-        if (networkTable.isConnected()) {
-            networkTable.putNumber("inputs/HLS_LOWER_H", lowerH);
-            networkTable.putNumber("inputs/HLS_LOWER_L", lowerL);
-            networkTable.putNumber("inputs/HLS_LOWER_S", lowerS);
+        if (inputs.isConnected() && !inputs.containsKey("TARGET_WIDTH")) {
+            inputs.putNumber("HLS_LOWER_H", lowerH);
+            inputs.putNumber("HLS_LOWER_L", lowerL);
+            inputs.putNumber("HLS_LOWER_S", lowerS);
 
-            networkTable.putNumber("inputs/HLS_UPPER_H", upperH);
-            networkTable.putNumber("inputs/HLS_UPPER_L", upperL);
-            networkTable.putNumber("inputs/HLS_UPPER_S", upperS);
+            inputs.putNumber("HLS_UPPER_H", upperH);
+            inputs.putNumber("HLS_UPPER_L", upperL);
+            inputs.putNumber("HLS_UPPER_S", upperS);
 
-            networkTable.putNumber("inputs/MIN_AREA", minArea);
+            inputs.putNumber("MIN_AREA", minArea);
 
-            networkTable.putNumber("inputs/EXPOSURE", exposure);
+            inputs.putNumber("EXPOSURE", exposure);
 
-            networkTable.putNumber("inputs/TARGET_WIDTH", targetWidth);
-            networkTable.putNumber("inputs/TARGET_CENTERX", targetCenterX);
+            inputs.putNumber("TARGET_WIDTH", targetWidth);
+            inputs.putNumber("TARGET_CENTERX", targetCenterX);
         }
 
         boolean first=true;
@@ -147,14 +156,10 @@ public class Main {
         Mat hls = null;
         Mat filtered = null;
         Mat cont = null;
-        if (networkTable.isConnected()) {
-            inputs = networkTable.getSubTable("inputs");
-        }
 
         while (true) {
             long mills = Instant.now().toEpochMilli() + 20;
-            if (networkTable.isConnected() && inputs!=null) {
-                inputs = networkTable.getSubTable("inputs");
+            if (inputs.isConnected()) {
                 lowerH = (int) inputs.getNumber("HLS_LOWER_H", lowerH);
                 lowerL = (int) inputs.getNumber("HLS_LOWER_L", lowerL);
                 lowerS = (int) inputs.getNumber("HLS_LOWER_S", lowerS);
@@ -234,27 +239,46 @@ public class Main {
                 final double cy = rect.y - (frame.height() / 2);
                 final int width = rect.width;
 
-                if (networkTable.isConnected()) {
+                if (tracking.isConnected()) {
                     // Send it all to NetworkTables
-                    networkTable.putString("TargetSighting", "Sighted");
-                    networkTable.putNumber("width", width);
-                    networkTable.putNumber("height", rect.height);
-                    networkTable.putNumber("centerX", cx);
-                    networkTable.putNumber("centerY", cy);
-                    if (cx<targetCenterX) {
-                        networkTable.putString("TargetCenter", "Left");
-                    } else if (cx>targetCenterX) {
-                        networkTable.putString("TargetCenter", "Right");
+                    tracking.putBoolean("TargetSighted", true);
+                    tracking.putString("TargetSighting", "Sighted");
+                    tracking.putNumber("width", width);
+                    tracking.putNumber("height", rect.height);
+                    tracking.putNumber("centerX", cx);
+                    tracking.putNumber("centerY", cy);
+                    if (cx<targetCenterX-toleranceX) {
+                        tracking.putString("TargetCenter", "Left");
+                        tracking.putBoolean("TargetLeft", true);
+                        tracking.putBoolean("TargetRight", false);
+                        tracking.putBoolean("TargetCentered", false);
+                    } else if (cx>targetCenterX+targetCenterX) {
+                        tracking.putString("TargetCenter", "Right");
+                        tracking.putBoolean("TargetLeft", false);
+                        tracking.putBoolean("TargetRight", true);
+                        tracking.putBoolean("TargetCentered", false);
                     } else {
-                        networkTable.putString("TargetCenter", "Centered");
+                        tracking.putString("TargetCenter", "Centered");
+                        tracking.putBoolean("TargetLeft", false);
+                        tracking.putBoolean("TargetRight", false);
+                        tracking.putBoolean("TargetCentered", true);
                     }
 
-                    if (width<targetWidth) {
-                        networkTable.putString("TargetDistance", "Too far");
-                    } else if (width>targetWidth) {
-                        networkTable.putString("TargetDistance", "Too close");
+                    if (width<targetWidth-toleranceWidth) {
+                        tracking.putString("TargetDistance", "Too far");
+                        tracking.putBoolean("TargetTooFar", true);
+                        tracking.putBoolean("TargetTooClose", false);
+                        tracking.putBoolean("TargetInRange", false);
+                    } else if (width>targetWidth+toleranceWidth) {
+                        tracking.putString("TargetDistance", "Too close");
+                        tracking.putBoolean("TargetTooFar", false);
+                        tracking.putBoolean("TargetTooClose", true);
+                        tracking.putBoolean("TargetInRange", false);
                     } else {
-                        networkTable.putString("TargetDistance", "In range");
+                        tracking.putString("TargetDistance", "In range");
+                        tracking.putBoolean("TargetTooFar", false);
+                        tracking.putBoolean("TargetTooClose", false);
+                        tracking.putBoolean("TargetInRange", true);
                     }
 
                     if (logging) {
@@ -262,9 +286,10 @@ public class Main {
                     }
                 }
             } else {
-                if (networkTable.isConnected()) {
+                if (tracking.isConnected()) {
                     // Send it all to NetworkTables
-                    networkTable.putString("TargetSighting", "Absent");
+                    tracking.putBoolean("TargetSighted", false);
+                    tracking.putString("TargetSighting", "Absent");
                 }
                 if (logging) {
                     System.out.println(String.format("Target absent."));
