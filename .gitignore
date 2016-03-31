@@ -14,3 +14,11 @@ hs_err_pid*
 #intellij
 .idea/workspace.xml 
 .idea/tasks.xml
+.idea/artifacts/pi_tracker_jar.xml
+1_bgr.png
+2_hls.png
+3_filtered.png
+4_cont.png
+out/artifacts/pi_tracker_jar/pi-tracker.jar
+out/production/pi-tracker/META-INF/MANIFEST.MF
+src/META-INF/MANIFEST.MF

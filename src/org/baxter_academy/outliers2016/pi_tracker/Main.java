@@ -7,6 +7,8 @@ import org.opencv.imgproc.Imgproc;
 import org.opencv.videoio.VideoCapture;
 import edu.wpi.first.wpilibj.networktables.NetworkTable;
 
+import java.io.File;
+import java.io.FileDescriptor;
 import java.security.Timestamp;
 import java.time.Instant;
 import java.util.ArrayList;
@@ -22,12 +24,15 @@ public class Main {
         int team = 5687;
         boolean logging = false;
         boolean images = false;
+        int rX = 0;
+        int rY = 0;
+        double tanTheta = 0.30859568219;
 
         for (String arg : args) {
             String[] a = arg.toLowerCase().split("=");
             if (a.length == 2) {
                 switch (a[0]) {
-                    case "cam":
+                    case "cam":/
                     case "camera":
                     case "c":
                         try {
@@ -86,7 +91,20 @@ public class Main {
         // We want the robot code to always look in the same place for output, so we use the same path as GRIP
         NetworkTable tracking = NetworkTable.getTable("PITracker/tracking");
         NetworkTable inputs = NetworkTable.getTable("PITracker/inputs");
+        NetworkTable dashboard = NetworkTable.getTable("SmartDashboard");
 
+        long startmills = Instant.now().toEpochMilli();
+
+        String prefix = "/home/pi/images/" + startmills;
+        if (images) {
+            File imageDir = new File(prefix);
+            imageDir.mkdir();
+            if (imageDir.exists()) {
+                prefix += "/";
+            } else {
+                prefix = "./";
+            }
+        }
         // tracking.putString("Test2", "Show you!!!!!");
         // tracking.setPersistent("Test2");
 
@@ -156,9 +174,12 @@ public class Main {
         Mat hls = null;
         Mat filtered = null;
         Mat cont = null;
+        MatOfInt minCompressionParam = new MatOfInt(Imgcodecs.CV_IMWRITE_PNG_COMPRESSION, 3);
+        MatOfInt compressionParam = new MatOfInt(Imgcodecs.CV_IMWRITE_PNG_COMPRESSION, 6);
+        MatOfInt maxCompressionParam = new MatOfInt(Imgcodecs.CV_IMWRITE_PNG_COMPRESSION, 8);
 
         while (true) {
-            long mills = Instant.now().toEpochMilli() + 20;
+            long mills = Instant.now().toEpochMilli();
             if (inputs.isConnected()) {
                 lowerH = (int) inputs.getNumber("HLS_LOWER_H", lowerH);
                 lowerL = (int) inputs.getNumber("HLS_LOWER_L", lowerL);
@@ -182,12 +203,20 @@ public class Main {
                     exposure = newExposure;
                 }
             }
+            if (dashboard.isConnected()) {
+                images = dashboard.getBoolean("lights/ringlight", false);
+            } else {
+                images = false;
+            }
 
 
             // Capture a frame and write to disk
             camera.read(frame);
+            rX = frame.width();
+            rY = frame.height();
+
             if (images) {
-                Imgcodecs.imwrite("1_bgr.png", frame);
+                Imgcodecs.imwrite(prefix + "a_bgr_" + mills + ".png", frame, minCompressionParam);
             }
 
             if (first) {
@@ -199,9 +228,9 @@ public class Main {
 
             // Convert to HLS color model
             Imgproc.cvtColor(frame, hls, Imgproc.COLOR_BGR2HLS);
-            if (images) {
-                Imgcodecs.imwrite("2_hls.png", hls);
-            }
+            //if (images) {
+            //    Imgcodecs.imwrite(prefix + "b_hls_" + mills + ".png", hls, maxCompressionParam);
+            //}
 
             // Filter using HLS lower and upper range
             Scalar lower = new Scalar(lowerH, lowerL, lowerS, 0);
@@ -209,15 +238,12 @@ public class Main {
 
             Core.inRange(hls, lower, upper, filtered);
             if (images) {
-                Imgcodecs.imwrite("3_filtered.png", filtered);
+                Imgcodecs.imwrite(prefix + "c_flt_" + mills + ".png", filtered, minCompressionParam);
             }
 
             // Find the contours...
             List<MatOfPoint> contours = new ArrayList<MatOfPoint>();
             Imgproc.findContours(filtered, contours, cont, Imgproc.RETR_EXTERNAL, Imgproc.CHAIN_APPROX_SIMPLE);
-            if (images && contours.size()>0) {
-                Imgcodecs.imwrite("4_cont.png", cont);
-            }
 
             // Now find the biggest contour (if any)
             double maxArea = 0;
@@ -237,7 +263,15 @@ public class Main {
                 // And its center point
                 final double cx = rect.x - (frame.width() / 2);
                 final double cy = rect.y - (frame.height() / 2);
+
+                final double aX = (cx - (rX/2)) / (rX / 2);
+                final double aY = (cy - (rY/2)) / (rY / 2);
+
                 final int width = rect.width;
+
+                // d = Tft * FOVpixel / (2*Tpixel * tanΘ)
+
+                double distance = 12 * rX / (2 * rect.width * tanTheta);
 
                 if (tracking.isConnected()) {
                     // Send it all to NetworkTables
@@ -247,6 +281,9 @@ public class Main {
                     tracking.putNumber("height", rect.height);
                     tracking.putNumber("centerX", cx);
                     tracking.putNumber("centerY", cy);
+                    tracking.putNumber("aimingX", aX);
+                    tracking.putNumber("aimingY", aY);
+                    tracking.putNumber("aimingDistance", distance);
                     if (cx<targetCenterX-toleranceX) {
                         tracking.putString("TargetCenter", "Left");
                         tracking.putBoolean("TargetLeft", true);
@@ -297,14 +334,17 @@ public class Main {
 
             }
             try {
-                long w = mills - Instant.now().toEpochMilli();
-                if (w > 0) {
-                    Thread.sleep(mills - Instant.now().toEpochMilli());
+                // Make sure that this has taken AT LEAST 20 milliseconds.
+                // If not, sleep until 20ms have passed
+                long w = (Instant.now().toEpochMilli() - mills);
+                if (w < 20) {
+                    Thread.sleep(20 - w);
                 }
             } catch (Exception e) {
             }
         }
 
     }
+
 }
 
