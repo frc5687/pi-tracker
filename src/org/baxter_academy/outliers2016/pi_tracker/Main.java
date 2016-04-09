@@ -366,7 +366,7 @@ public class Main {
                     if (images) {
                         try {
                             //create a temporary file
-                            File logFile=new File(prefix + "c_log_" + mills + ".txt");
+                            File logFile=new File(prefix + "d_log_" + mills + ".txt");
 
                             BufferedWriter writer = new BufferedWriter(new FileWriter(logFile));
                             writer.write("");
@@ -393,18 +393,20 @@ public class Main {
                     System.out.println(String.format("Target absent."));
                 }
 
-                try {
-                    //create a temporary file
-                    File logFile=new File(prefix + "c_log_" + mills + ".txt");
+                if (images) {
+                    try {
+                        //create a temporary file
+                        File logFile=new File(prefix + "d_log_" + mills + ".txt");
 
-                    BufferedWriter writer = new BufferedWriter(new FileWriter(logFile));
-                    writer.write("");
-                    writer.write("TargetSighted: false"); writer.newLine();
-                    writer.write("TargetSighting: Absent"); writer.newLine();
-                    //Close writer
-                    writer.close();
-                } catch(Exception e) {
+                        BufferedWriter writer = new BufferedWriter(new FileWriter(logFile));
+                        writer.write("");
+                        writer.write("TargetSighted: false"); writer.newLine();
+                        writer.write("TargetSighting: Absent"); writer.newLine();
+                        //Close writer
+                        writer.close();
+                    } catch(Exception e) {
 
+                    }
                 }
 
             }
