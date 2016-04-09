@@ -7,12 +7,17 @@ import org.opencv.imgproc.Imgproc;
 import org.opencv.videoio.VideoCapture;
 import edu.wpi.first.wpilibj.networktables.NetworkTable;
 
+import java.io.BufferedWriter;
 import java.io.File;
 import java.io.FileDescriptor;
+import java.io.FileWriter;
+import java.net.*;
 import java.security.Timestamp;
+import java.text.SimpleDateFormat;
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.Date;
+import java.util.Enumeration;
 import java.util.List;
 
 
@@ -26,13 +31,14 @@ public class Main {
         boolean images = false;
         int rX = 0;
         int rY = 0;
-        double tanTheta = 0.30859568219;
+
+        long startMills = Instant.now().toEpochMilli();
 
         for (String arg : args) {
             String[] a = arg.toLowerCase().split("=");
             if (a.length == 2) {
                 switch (a[0]) {
-                    case "cam":/
+                    case "cam":
                     case "camera":
                     case "c":
                         try {
@@ -93,25 +99,6 @@ public class Main {
         NetworkTable inputs = NetworkTable.getTable("PITracker/inputs");
         NetworkTable dashboard = NetworkTable.getTable("SmartDashboard");
 
-        long startmills = Instant.now().toEpochMilli();
-
-        String prefix = "/home/pi/images/" + startmills;
-        if (images) {
-            File imageDir = new File(prefix);
-            imageDir.mkdir();
-            if (imageDir.exists()) {
-                prefix += "/";
-            } else {
-                prefix = "./";
-            }
-        }
-        // tracking.putString("Test2", "Show you!!!!!");
-        // tracking.setPersistent("Test2");
-
-        // if (tracking.isConnected()) {
-        //     inputs = tracking.getSubTable("inputs");
-        //}
-
         // Initialize OpenCV
         System.out.println("Loading OpenCV...");
         // Load the native library.
@@ -136,6 +123,55 @@ public class Main {
         // And set the exposure low (to improve contrast of retro-reflective tape)
         camera.set(15, exposure);
 
+
+        long folderNumber = 1;
+
+        String prefix = "./";
+        if (images) {
+            while (true) {
+                prefix = "/home/pi/images/" + folderNumber;
+                File imageDir = new File(prefix);
+                if (!imageDir.exists()) {
+                    imageDir.mkdir();
+                    if (imageDir.exists()) {
+                        prefix += "/";
+                    } else {
+                        prefix = "./";
+                    }
+                    break;
+                }
+                folderNumber++;
+            }
+        }
+
+        int retry = 240;
+        while (!tracking.isConnected() && retry > 0) {
+            retry--;
+            try {
+                Thread.sleep(1000);
+            } catch (InterruptedException ie) {
+                break;
+            }
+        }
+
+
+        if (tracking.isConnected()) {
+            // Send it all to NetworkTables
+            try {
+                tracking.putString("Address", getFirstNonLoopbackAddress(true, false).getHostAddress());
+            } catch (Exception e) {
+            }
+            tracking.putNumber("Folder", folderNumber);
+            tracking.putNumber("Start Time: ", startMills);
+        }
+        // tracking.putString("Test2", "Show you!!!!!");
+        // tracking.setPersistent("Test2");
+
+        // if (tracking.isConnected()) {
+        //     inputs = tracking.getSubTable("inputs");
+        //}
+
+
         long targetCenterX =-106;
         long targetWidth = 148;
 
@@ -143,11 +179,11 @@ public class Main {
         long toleranceWidth = 10;
 
         int lowerH = 50;
-        int lowerL = 110;
+        int lowerL = 34;
         int lowerS = 64;
 
         int upperH = 94;
-        int upperL = 235;
+        int upperL = 220;
         int upperS = 255;
 
         int minArea = 20;
@@ -163,10 +199,21 @@ public class Main {
 
             inputs.putNumber("MIN_AREA", minArea);
 
-            inputs.putNumber("EXPOSURE", exposure);
-
             inputs.putNumber("TARGET_WIDTH", targetWidth);
             inputs.putNumber("TARGET_CENTERX", targetCenterX);
+
+            inputs.setPersistent("HLS_LOWER_H");
+            inputs.setPersistent("HLS_LOWER_L");
+            inputs.setPersistent("HLS_LOWER_S");
+            inputs.setPersistent("HLS_UPPER_H");
+            inputs.setPersistent("HLS_UPPER_L");
+            inputs.setPersistent("HLS_UPPER_S");
+
+            inputs.setPersistent("MIN_AREA");
+
+            inputs.setPersistent("TARGET_WIDTH");
+            inputs.setPersistent("TARGET_CENTERX");
+
         }
 
         boolean first=true;
@@ -179,7 +226,7 @@ public class Main {
         MatOfInt maxCompressionParam = new MatOfInt(Imgcodecs.CV_IMWRITE_PNG_COMPRESSION, 8);
 
         while (true) {
-            long mills = Instant.now().toEpochMilli();
+            long mills = Instant.now().toEpochMilli() - startMills;
             if (inputs.isConnected()) {
                 lowerH = (int) inputs.getNumber("HLS_LOWER_H", lowerH);
                 lowerL = (int) inputs.getNumber("HLS_LOWER_L", lowerL);
@@ -269,10 +316,6 @@ public class Main {
 
                 final int width = rect.width;
 
-                // d = Tft * FOVpixel / (2*Tpixel * tanΘ)
-
-                double distance = 12 * rX / (2 * rect.width * tanTheta);
-
                 if (tracking.isConnected()) {
                     // Send it all to NetworkTables
                     tracking.putBoolean("TargetSighted", true);
@@ -281,9 +324,7 @@ public class Main {
                     tracking.putNumber("height", rect.height);
                     tracking.putNumber("centerX", cx);
                     tracking.putNumber("centerY", cy);
-                    tracking.putNumber("aimingX", aX);
-                    tracking.putNumber("aimingY", aY);
-                    tracking.putNumber("aimingDistance", distance);
+                    /*
                     if (cx<targetCenterX-toleranceX) {
                         tracking.putString("TargetCenter", "Left");
                         tracking.putBoolean("TargetLeft", true);
@@ -317,9 +358,29 @@ public class Main {
                         tracking.putBoolean("TargetTooClose", false);
                         tracking.putBoolean("TargetInRange", true);
                     }
-
+                    */
                     if (logging) {
                         System.out.println(String.format("Height=%1$f, Width=%1$f, center=%2$f,%3$f", rect.size().height, rect.size().width, cx, cy));
+                    }
+
+                    if (images) {
+                        try {
+                            //create a temporary file
+                            File logFile=new File(prefix + "c_log_" + mills + ".txt");
+
+                            BufferedWriter writer = new BufferedWriter(new FileWriter(logFile));
+                            writer.write("");
+                            writer.write("TargetSighted: true"); writer.newLine();
+                            writer.write("TargetSighting: Sighted"); writer.newLine();
+                            writer.write("width: " + width); writer.newLine();
+                            writer.write("height: " + rect.height); writer.newLine();
+                            writer.write("centerX: " + cx); writer.newLine();
+                            writer.write("centerY: " + cy); writer.newLine();
+                            //Close writer
+                            writer.close();
+                        } catch(Exception e) {
+
+                        }
                     }
                 }
             } else {
@@ -332,7 +393,23 @@ public class Main {
                     System.out.println(String.format("Target absent."));
                 }
 
+                try {
+                    //create a temporary file
+                    File logFile=new File(prefix + "c_log_" + mills + ".txt");
+
+                    BufferedWriter writer = new BufferedWriter(new FileWriter(logFile));
+                    writer.write("");
+                    writer.write("TargetSighted: false"); writer.newLine();
+                    writer.write("TargetSighting: Absent"); writer.newLine();
+                    //Close writer
+                    writer.close();
+                } catch(Exception e) {
+
+                }
+
             }
+
+
             try {
                 // Make sure that this has taken AT LEAST 20 milliseconds.
                 // If not, sleep until 20ms have passed
@@ -346,5 +423,29 @@ public class Main {
 
     }
 
+    private static InetAddress getFirstNonLoopbackAddress(boolean preferIpv4, boolean preferIPv6) throws SocketException {
+        Enumeration en = NetworkInterface.getNetworkInterfaces();
+        while (en.hasMoreElements()) {
+            NetworkInterface i = (NetworkInterface) en.nextElement();
+            for (Enumeration en2 = i.getInetAddresses(); en2.hasMoreElements(); ) {
+                InetAddress addr = (InetAddress) en2.nextElement();
+                if (!addr.isLoopbackAddress()) {
+                    if (addr instanceof Inet4Address) {
+                        if (preferIPv6) {
+                            continue;
+                        }
+                        return addr;
+                    }
+                    if (addr instanceof Inet6Address) {
+                        if (preferIpv4) {
+                            continue;
+                        }
+                        return addr;
+                    }
+                }
+            }
+        }
+        return null;
+    }
 }
 
