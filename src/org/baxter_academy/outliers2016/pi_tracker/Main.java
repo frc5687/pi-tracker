@@ -144,6 +144,7 @@ public class Main {
             }
         }
 
+        /*
         int retry = 240;
         while (!tracking.isConnected() && retry > 0) {
             retry--;
@@ -153,7 +154,7 @@ public class Main {
                 break;
             }
         }
-
+        */
 
         if (tracking.isConnected()) {
             // Send it all to NetworkTables
@@ -180,7 +181,7 @@ public class Main {
 
         int lowerH = 50;
         int lowerL = 34;
-        int lowerS = 64;
+        int lowerS = 163;
 
         int upperH = 94;
         int upperL = 220;
@@ -253,7 +254,7 @@ public class Main {
             if (dashboard.isConnected()) {
                 images = dashboard.getBoolean("lights/ringlight", false);
             } else {
-                images = false;
+                images = true; // false;
             }
 
 
