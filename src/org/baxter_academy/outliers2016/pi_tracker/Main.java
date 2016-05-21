@@ -94,6 +94,8 @@ public class Main {
         // Initialize the NetworkTable library with team information
         NetworkTable.setClientMode();
         NetworkTable.setTeam(team);
+        NetworkTable.setIPAddress("10.56.87.02");
+
         // We want the robot code to always look in the same place for output, so we use the same path as GRIP
         NetworkTable tracking = NetworkTable.getTable("PITracker/tracking");
         NetworkTable inputs = NetworkTable.getTable("PITracker/inputs");
@@ -144,7 +146,7 @@ public class Main {
             }
         }
 
-        /*
+
         int retry = 240;
         while (!tracking.isConnected() && retry > 0) {
             retry--;
@@ -154,7 +156,7 @@ public class Main {
                 break;
             }
         }
-        */
+
 
         if (tracking.isConnected()) {
             // Send it all to NetworkTables
@@ -165,27 +167,27 @@ public class Main {
             tracking.putNumber("Folder", folderNumber);
             tracking.putNumber("Start Time: ", startMills);
         }
-        // tracking.putString("Test2", "Show you!!!!!");
-        // tracking.setPersistent("Test2");
-
-        // if (tracking.isConnected()) {
-        //     inputs = tracking.getSubTable("inputs");
-        //}
 
 
         long targetCenterX =-106;
         long targetWidth = 148;
 
-        long toleranceX = 10;
-        long toleranceWidth = 10;
-
         int lowerH = 50;
-        int lowerL = 34;
-        int lowerS = 163;
+        int lowerL = 85;
+        int lowerS = 32;
 
-        int upperH = 94;
-        int upperL = 220;
+        int upperH = 95;
+        int upperL = 246;
         int upperS = 255;
+/*
+        int lowerH = 57;
+        int lowerL = 44;
+        int lowerS = 105;
+
+        int upperH = 100;
+        int upperL = 174;
+        int upperS = 255;
+*/
 
         int minArea = 20;
 
@@ -227,8 +229,10 @@ public class Main {
         MatOfInt maxCompressionParam = new MatOfInt(Imgcodecs.CV_IMWRITE_PNG_COMPRESSION, 8);
 
         while (true) {
+            StringBuilder log = new StringBuilder();
             long mills = Instant.now().toEpochMilli() - startMills;
-            if (inputs.isConnected()) {
+            if (false) {
+
                 lowerH = (int) inputs.getNumber("HLS_LOWER_H", lowerH);
                 lowerL = (int) inputs.getNumber("HLS_LOWER_L", lowerL);
                 lowerS = (int) inputs.getNumber("HLS_LOWER_S", lowerS);
@@ -254,9 +258,8 @@ public class Main {
             if (dashboard.isConnected()) {
                 images = dashboard.getBoolean("lights/ringlight", false);
             } else {
-                images = true; // false;
+                images = false; // false;
             }
-
 
             // Capture a frame and write to disk
             camera.read(frame);
@@ -276,9 +279,9 @@ public class Main {
 
             // Convert to HLS color model
             Imgproc.cvtColor(frame, hls, Imgproc.COLOR_BGR2HLS);
-            //if (images) {
-            //    Imgcodecs.imwrite(prefix + "b_hls_" + mills + ".png", hls, maxCompressionParam);
-            //}
+            if (images) {
+                Imgcodecs.imwrite(prefix + "b_hls_" + mills + ".png", hls, minCompressionParam);
+            }
 
             // Filter using HLS lower and upper range
             Scalar lower = new Scalar(lowerH, lowerL, lowerS, 0);
@@ -377,6 +380,7 @@ public class Main {
                             writer.write("height: " + rect.height); writer.newLine();
                             writer.write("centerX: " + cx); writer.newLine();
                             writer.write("centerY: " + cy); writer.newLine();
+                            writer.write("Log: " + log.toString()); writer.newLine();
                             //Close writer
                             writer.close();
                         } catch(Exception e) {
@@ -403,6 +407,7 @@ public class Main {
                         writer.write("");
                         writer.write("TargetSighted: false"); writer.newLine();
                         writer.write("TargetSighting: Absent"); writer.newLine();
+                        writer.write("Log: " + log.toString()); writer.newLine();
                         //Close writer
                         writer.close();
                     } catch(Exception e) {
