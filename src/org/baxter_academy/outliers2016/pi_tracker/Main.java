@@ -1,5 +1,6 @@
 package org.baxter_academy.outliers2016.pi_tracker;
 
+import com.sun.org.apache.xerces.internal.impl.xpath.regex.Match;
 import edu.wpi.first.wpilibj.tables.ITable;
 import org.opencv.core.*;
 import org.opencv.imgcodecs.Imgcodecs;
@@ -22,6 +23,14 @@ import java.util.List;
 
 
 public class Main {
+    private static double CENTER_X = 319.5;
+    private static double CENTER_Y = 239.5;
+    private static double FOCAL = 543.25;
+
+    private static double CAMERA_HEIGHT = 10;
+    private static double TARGET_HEIGHT = 91;
+    private static double CAMERA_ANGLE = 45.00;
+
 
     public static void main(String[] args) {
         int camPort = 0;
@@ -173,11 +182,7 @@ public class Main {
         //}
 
 
-        long targetCenterX =-106;
-        long targetWidth = 148;
 
-        long toleranceX = 10;
-        long toleranceWidth = 10;
 
         int lowerH = 50;
         int lowerL = 34;
@@ -200,9 +205,6 @@ public class Main {
 
             inputs.putNumber("MIN_AREA", minArea);
 
-            inputs.putNumber("TARGET_WIDTH", targetWidth);
-            inputs.putNumber("TARGET_CENTERX", targetCenterX);
-
             inputs.setPersistent("HLS_LOWER_H");
             inputs.setPersistent("HLS_LOWER_L");
             inputs.setPersistent("HLS_LOWER_S");
@@ -211,10 +213,6 @@ public class Main {
             inputs.setPersistent("HLS_UPPER_S");
 
             inputs.setPersistent("MIN_AREA");
-
-            inputs.setPersistent("TARGET_WIDTH");
-            inputs.setPersistent("TARGET_CENTERX");
-
         }
 
         boolean first=true;
@@ -238,9 +236,6 @@ public class Main {
                 upperS = (int) inputs.getNumber("HLS_UPPER_S", upperS);
 
                 minArea = (int) inputs.getNumber("MIN_AREA", minArea);
-
-                targetWidth = (long) inputs.getNumber("TARGET_WIDTH", targetWidth);
-                targetCenterX = (long) inputs.getNumber("TARGET_CENTERX", targetCenterX);
 
                 double newExposure = (double) inputs.getNumber("EXPOSURE", exposure);
                 if (newExposure != exposure) {
@@ -309,59 +304,38 @@ public class Main {
                 final Rect rect = Imgproc.boundingRect(biggest);
 
                 // And its center point
-                final double cx = rect.x - (frame.width() / 2);
-                final double cy = rect.y - (frame.height() / 2);
+                final double cx = rect.x + (rect.width / 2);
+                final double cy = rect.y + (rect.height / 2);
 
-                final double aX = (cx - (rX/2)) / (rX / 2);
-                final double aY = (cy - (rY/2)) / (rY / 2);
 
                 final int width = rect.width;
+                final int height = rect.height;
+
+                // Find the lateral offset angle
+                final double offsetAngle = getAngle(cx, CENTER_X);
+
+
+                // Now find the vertical angle
+                final double verticalAngle = getAngle(cy, CENTER_Y);
+
+                // From that, determine the distance to the target
+                final double distance = getDistance(verticalAngle);
+
 
                 if (tracking.isConnected()) {
                     // Send it all to NetworkTables
+                    tracking.putNumber("Mills", mills);
                     tracking.putBoolean("TargetSighted", true);
                     tracking.putString("TargetSighting", "Sighted");
                     tracking.putNumber("width", width);
                     tracking.putNumber("height", rect.height);
                     tracking.putNumber("centerX", cx);
                     tracking.putNumber("centerY", cy);
-                    /*
-                    if (cx<targetCenterX-toleranceX) {
-                        tracking.putString("TargetCenter", "Left");
-                        tracking.putBoolean("TargetLeft", true);
-                        tracking.putBoolean("TargetRight", false);
-                        tracking.putBoolean("TargetCentered", false);
-                    } else if (cx>targetCenterX+targetCenterX) {
-                        tracking.putString("TargetCenter", "Right");
-                        tracking.putBoolean("TargetLeft", false);
-                        tracking.putBoolean("TargetRight", true);
-                        tracking.putBoolean("TargetCentered", false);
-                    } else {
-                        tracking.putString("TargetCenter", "Centered");
-                        tracking.putBoolean("TargetLeft", false);
-                        tracking.putBoolean("TargetRight", false);
-                        tracking.putBoolean("TargetCentered", true);
-                    }
+                    tracking.putNumber("offsetAngle", offsetAngle);
+                    tracking.putNumber("distance", distance);
 
-                    if (width<targetWidth-toleranceWidth) {
-                        tracking.putString("TargetDistance", "Too far");
-                        tracking.putBoolean("TargetTooFar", true);
-                        tracking.putBoolean("TargetTooClose", false);
-                        tracking.putBoolean("TargetInRange", false);
-                    } else if (width>targetWidth+toleranceWidth) {
-                        tracking.putString("TargetDistance", "Too close");
-                        tracking.putBoolean("TargetTooFar", false);
-                        tracking.putBoolean("TargetTooClose", true);
-                        tracking.putBoolean("TargetInRange", false);
-                    } else {
-                        tracking.putString("TargetDistance", "In range");
-                        tracking.putBoolean("TargetTooFar", false);
-                        tracking.putBoolean("TargetTooClose", false);
-                        tracking.putBoolean("TargetInRange", true);
-                    }
-                    */
                     if (logging) {
-                        System.out.println(String.format("Height=%1$f, Width=%1$f, center=%2$f,%3$f", rect.size().height, rect.size().width, cx, cy));
+                        System.out.println(String.format("Height=%1$f, Width=%1$f, Center=%2$f,%3$f, Angle=%4$f, Distance=%5$f", rect.size().height, rect.size().width, cx, cy, offsetAngle, distance));
                     }
 
                     if (images) {
@@ -371,12 +345,15 @@ public class Main {
 
                             BufferedWriter writer = new BufferedWriter(new FileWriter(logFile));
                             writer.write("");
+                            writer.write("Mills: " + mills); writer.newLine();
                             writer.write("TargetSighted: true"); writer.newLine();
                             writer.write("TargetSighting: Sighted"); writer.newLine();
                             writer.write("width: " + width); writer.newLine();
                             writer.write("height: " + rect.height); writer.newLine();
                             writer.write("centerX: " + cx); writer.newLine();
                             writer.write("centerY: " + cy); writer.newLine();
+                            writer.write("offsetAngle: " + offsetAngle); writer.newLine();
+                            writer.write("distance: " + distance); writer.newLine();
                             //Close writer
                             writer.close();
                         } catch(Exception e) {
@@ -401,6 +378,7 @@ public class Main {
 
                         BufferedWriter writer = new BufferedWriter(new FileWriter(logFile));
                         writer.write("");
+                        writer.write("Mills: " + mills); writer.newLine();
                         writer.write("TargetSighted: false"); writer.newLine();
                         writer.write("TargetSighting: Absent"); writer.newLine();
                         //Close writer
@@ -425,6 +403,16 @@ public class Main {
         }
 
     }
+
+
+    private static double getAngle(double centerX, double frameCenter) {
+        return Math.atan((centerX - frameCenter)/FOCAL);
+    }
+
+    private static double getDistance(double verticalAngle) {
+        return TARGET_HEIGHT - CAMERA_HEIGHT / Math.tan((verticalAngle + CAMERA_ANGLE)* Math.PI / 180);
+    }
+
 
     private static InetAddress getFirstNonLoopbackAddress(boolean preferIpv4, boolean preferIPv6) throws SocketException {
         Enumeration en = NetworkInterface.getNetworkInterfaces();
