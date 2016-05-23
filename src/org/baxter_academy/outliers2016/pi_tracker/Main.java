@@ -1,6 +1,5 @@
 package org.baxter_academy.outliers2016.pi_tracker;
 
-import edu.wpi.first.wpilibj.tables.ITable;
 import org.opencv.core.*;
 import org.opencv.imgcodecs.Imgcodecs;
 import org.opencv.imgproc.Imgproc;
@@ -9,19 +8,25 @@ import edu.wpi.first.wpilibj.networktables.NetworkTable;
 
 import java.io.BufferedWriter;
 import java.io.File;
-import java.io.FileDescriptor;
 import java.io.FileWriter;
 import java.net.*;
-import java.security.Timestamp;
-import java.text.SimpleDateFormat;
 import java.time.Instant;
 import java.util.ArrayList;
-import java.util.Date;
 import java.util.Enumeration;
 import java.util.List;
 
 
 public class Main {
+    private static double CENTER_X = 319.5;
+    private static double CENTER_Y = 239.5;
+    private static double FOCAL = 543.25;
+
+    private static double CAMERA_HEIGHT = 4;
+    private static double TARGET_BOTTOM_HEIGHT = 84;
+    private static double TARGET_HEIGHT = 14;
+    private static double TARGET_WIDTH = 20;
+    private static double CAMERA_ANGLE = 45.00;
+
 
     public static void main(String[] args) {
         int camPort = 0;
@@ -86,7 +91,6 @@ public class Main {
         }
 
         System.out.println(String.format("Camera port set to %1$d", camPort));
-        System.out.println(String.format("Exposure set to %1$f", exposure));
         System.out.println(String.format("Team set to %1$d", team));
         System.out.println(String.format("Logging set to %1$b", logging));
         System.out.println(String.format("Images set to %1$b", images));
@@ -123,7 +127,7 @@ public class Main {
         }
 
         // And set the exposure low (to improve contrast of retro-reflective tape)
-        camera.set(15, exposure);
+        // camera.set(15, exposure);
 
 
         long folderNumber = 1;
@@ -169,15 +173,14 @@ public class Main {
         }
 
 
-        long targetCenterX =-106;
-        long targetWidth = 148;
 
-        int lowerH = 50;
-        int lowerL = 85;
-        int lowerS = 32;
 
-        int upperH = 95;
-        int upperL = 246;
+        int lowerH = 53;
+        int lowerL = 5;
+        int lowerS = 190;
+
+        int upperH = 74;
+        int upperL = 135;
         int upperS = 255;
 /*
         int lowerH = 57;
@@ -202,9 +205,6 @@ public class Main {
 
             inputs.putNumber("MIN_AREA", minArea);
 
-            inputs.putNumber("TARGET_WIDTH", targetWidth);
-            inputs.putNumber("TARGET_CENTERX", targetCenterX);
-
             inputs.setPersistent("HLS_LOWER_H");
             inputs.setPersistent("HLS_LOWER_L");
             inputs.setPersistent("HLS_LOWER_S");
@@ -213,10 +213,6 @@ public class Main {
             inputs.setPersistent("HLS_UPPER_S");
 
             inputs.setPersistent("MIN_AREA");
-
-            inputs.setPersistent("TARGET_WIDTH");
-            inputs.setPersistent("TARGET_CENTERX");
-
         }
 
         boolean first=true;
@@ -243,9 +239,6 @@ public class Main {
 
                 minArea = (int) inputs.getNumber("MIN_AREA", minArea);
 
-                targetWidth = (long) inputs.getNumber("TARGET_WIDTH", targetWidth);
-                targetCenterX = (long) inputs.getNumber("TARGET_CENTERX", targetCenterX);
-
                 double newExposure = (double) inputs.getNumber("EXPOSURE", exposure);
                 if (newExposure != exposure) {
                     if (logging) {
@@ -258,7 +251,7 @@ public class Main {
             if (dashboard.isConnected()) {
                 images = dashboard.getBoolean("lights/ringlight", false);
             } else {
-                images = false; // false;
+                images = true; // false;
             }
 
             // Capture a frame and write to disk
@@ -279,9 +272,9 @@ public class Main {
 
             // Convert to HLS color model
             Imgproc.cvtColor(frame, hls, Imgproc.COLOR_BGR2HLS);
-            if (images) {
-                Imgcodecs.imwrite(prefix + "b_hls_" + mills + ".png", hls, minCompressionParam);
-            }
+            //if (images) {
+            //    Imgcodecs.imwrite(prefix + "b_hls_" + mills + ".png", hls, minCompressionParam);
+            //}
 
             // Filter using HLS lower and upper range
             Scalar lower = new Scalar(lowerH, lowerL, lowerS, 0);
@@ -312,82 +305,67 @@ public class Main {
                 final Rect rect = Imgproc.boundingRect(biggest);
 
                 // And its center point
-                final double cx = rect.x - (frame.width() / 2);
-                final double cy = rect.y - (frame.height() / 2);
+                final double cx = rect.x + (rect.width / 2) - (rX / 2);
+                final double cy = -1 * (rect.y + (rect.height / 2) - (rY / 2));
 
-                final double aX = (cx - (rX/2)) / (rX / 2);
-                final double aY = (cy - (rY/2)) / (rY / 2);
 
                 final int width = rect.width;
+                final int height = rect.height;
+
+                // Find the lateral offset angle
+                final double offsetAngle = getAngle(cx);
+
+
+                // Now find the vertical angle
+                final double verticalAngle = getAngle(cy);
+
+                // From that, determine the distance to the target
+                final double distance = getDistance(verticalAngle);
+
+
 
                 if (tracking.isConnected()) {
                     // Send it all to NetworkTables
+                    tracking.putNumber("Mills", mills);
                     tracking.putBoolean("TargetSighted", true);
                     tracking.putString("TargetSighting", "Sighted");
                     tracking.putNumber("width", width);
                     tracking.putNumber("height", rect.height);
                     tracking.putNumber("centerX", cx);
                     tracking.putNumber("centerY", cy);
-                    /*
-                    if (cx<targetCenterX-toleranceX) {
-                        tracking.putString("TargetCenter", "Left");
-                        tracking.putBoolean("TargetLeft", true);
-                        tracking.putBoolean("TargetRight", false);
-                        tracking.putBoolean("TargetCentered", false);
-                    } else if (cx>targetCenterX+targetCenterX) {
-                        tracking.putString("TargetCenter", "Right");
-                        tracking.putBoolean("TargetLeft", false);
-                        tracking.putBoolean("TargetRight", true);
-                        tracking.putBoolean("TargetCentered", false);
-                    } else {
-                        tracking.putString("TargetCenter", "Centered");
-                        tracking.putBoolean("TargetLeft", false);
-                        tracking.putBoolean("TargetRight", false);
-                        tracking.putBoolean("TargetCentered", true);
-                    }
+                    tracking.putNumber("offsetAngle", offsetAngle);
+                    tracking.putNumber("distance", distance);
 
-                    if (width<targetWidth-toleranceWidth) {
-                        tracking.putString("TargetDistance", "Too far");
-                        tracking.putBoolean("TargetTooFar", true);
-                        tracking.putBoolean("TargetTooClose", false);
-                        tracking.putBoolean("TargetInRange", false);
-                    } else if (width>targetWidth+toleranceWidth) {
-                        tracking.putString("TargetDistance", "Too close");
-                        tracking.putBoolean("TargetTooFar", false);
-                        tracking.putBoolean("TargetTooClose", true);
-                        tracking.putBoolean("TargetInRange", false);
-                    } else {
-                        tracking.putString("TargetDistance", "In range");
-                        tracking.putBoolean("TargetTooFar", false);
-                        tracking.putBoolean("TargetTooClose", false);
-                        tracking.putBoolean("TargetInRange", true);
-                    }
-                    */
-                    if (logging) {
-                        System.out.println(String.format("Height=%1$f, Width=%1$f, center=%2$f,%3$f", rect.size().height, rect.size().width, cx, cy));
-                    }
 
-                    if (images) {
-                        try {
-                            //create a temporary file
-                            File logFile=new File(prefix + "d_log_" + mills + ".txt");
+                }
 
-                            BufferedWriter writer = new BufferedWriter(new FileWriter(logFile));
-                            writer.write("");
-                            writer.write("TargetSighted: true"); writer.newLine();
-                            writer.write("TargetSighting: Sighted"); writer.newLine();
-                            writer.write("width: " + width); writer.newLine();
-                            writer.write("height: " + rect.height); writer.newLine();
-                            writer.write("centerX: " + cx); writer.newLine();
-                            writer.write("centerY: " + cy); writer.newLine();
-                            writer.write("Log: " + log.toString()); writer.newLine();
-                            //Close writer
-                            writer.close();
-                        } catch(Exception e) {
+                if (logging) {
+                    System.out.println(String.format("cx=%1$f, cy=%2$f, offsetAngle=%3$f, distance=%4$f", cx, cy, offsetAngle, distance));
+                }
 
-                        }
+                if (images) {
+                    try {
+                        //create a temporary file
+                        File logFile=new File(prefix + "d_log_" + mills + ".txt");
+
+                        BufferedWriter writer = new BufferedWriter(new FileWriter(logFile));
+                        writer.write("");
+                        writer.write("Mills: " + mills); writer.newLine();
+                        writer.write("TargetSighted: true"); writer.newLine();
+                        writer.write("TargetSighting: Sighted"); writer.newLine();
+                        writer.write("width: " + width); writer.newLine();
+                        writer.write("height: " + rect.height); writer.newLine();
+                        writer.write("centerX: " + cx); writer.newLine();
+                        writer.write("centerY: " + cy); writer.newLine();
+                        writer.write("offsetAngle: " + offsetAngle); writer.newLine();
+                        writer.write("distance: " + distance); writer.newLine();
+                        //Close writer
+                        writer.close();
+                    } catch(Exception e) {
+
                     }
                 }
+
             } else {
                 if (tracking.isConnected()) {
                     // Send it all to NetworkTables
@@ -405,6 +383,7 @@ public class Main {
 
                         BufferedWriter writer = new BufferedWriter(new FileWriter(logFile));
                         writer.write("");
+                        writer.write("Mills: " + mills); writer.newLine();
                         writer.write("TargetSighted: false"); writer.newLine();
                         writer.write("TargetSighting: Absent"); writer.newLine();
                         writer.write("Log: " + log.toString()); writer.newLine();
@@ -430,6 +409,16 @@ public class Main {
         }
 
     }
+
+
+    private static double getAngle(double centerX) {
+        return Math.atan(centerX/FOCAL) * 180 / Math.PI;
+    }
+
+    private static double getDistance(double verticalAngle) {
+        return (TARGET_BOTTOM_HEIGHT + (TARGET_HEIGHT/2) - CAMERA_HEIGHT) / Math.tan((verticalAngle + CAMERA_ANGLE) * Math.PI / 180) ;
+    }
+
 
     private static InetAddress getFirstNonLoopbackAddress(boolean preferIpv4, boolean preferIPv6) throws SocketException {
         Enumeration en = NetworkInterface.getNetworkInterfaces();
