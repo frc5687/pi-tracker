@@ -98,6 +98,8 @@ public class Main {
         // Initialize the NetworkTable library with team information
         NetworkTable.setClientMode();
         NetworkTable.setTeam(team);
+        NetworkTable.setIPAddress("10.56.87.02");
+
         // We want the robot code to always look in the same place for output, so we use the same path as GRIP
         NetworkTable tracking = NetworkTable.getTable("PITracker/tracking");
         NetworkTable inputs = NetworkTable.getTable("PITracker/inputs");
@@ -148,7 +150,7 @@ public class Main {
             }
         }
 
-        /*
+
         int retry = 240;
         while (!tracking.isConnected() && retry > 0) {
             retry--;
@@ -158,7 +160,7 @@ public class Main {
                 break;
             }
         }
-        */
+
 
         if (tracking.isConnected()) {
             // Send it all to NetworkTables
@@ -169,12 +171,6 @@ public class Main {
             tracking.putNumber("Folder", folderNumber);
             tracking.putNumber("Start Time: ", startMills);
         }
-        // tracking.putString("Test2", "Show you!!!!!");
-        // tracking.setPersistent("Test2");
-
-        // if (tracking.isConnected()) {
-        //     inputs = tracking.getSubTable("inputs");
-        //}
 
 
 
@@ -186,6 +182,15 @@ public class Main {
         int upperH = 74;
         int upperL = 135;
         int upperS = 255;
+/*
+        int lowerH = 57;
+        int lowerL = 44;
+        int lowerS = 105;
+
+        int upperH = 100;
+        int upperL = 174;
+        int upperS = 255;
+*/
 
         int minArea = 20;
 
@@ -220,8 +225,10 @@ public class Main {
         MatOfInt maxCompressionParam = new MatOfInt(Imgcodecs.CV_IMWRITE_PNG_COMPRESSION, 8);
 
         while (true) {
+            StringBuilder log = new StringBuilder();
             long mills = Instant.now().toEpochMilli() - startMills;
-            if (inputs.isConnected()) {
+            if (false) {
+
                 lowerH = (int) inputs.getNumber("HLS_LOWER_H", lowerH);
                 lowerL = (int) inputs.getNumber("HLS_LOWER_L", lowerL);
                 lowerS = (int) inputs.getNumber("HLS_LOWER_S", lowerS);
@@ -247,7 +254,6 @@ public class Main {
                 images = true; // false;
             }
 
-
             // Capture a frame and write to disk
             camera.read(frame);
             rX = frame.width();
@@ -267,7 +273,7 @@ public class Main {
             // Convert to HLS color model
             Imgproc.cvtColor(frame, hls, Imgproc.COLOR_BGR2HLS);
             //if (images) {
-            //    Imgcodecs.imwrite(prefix + "b_hls_" + mills + ".png", hls, maxCompressionParam);
+            //    Imgcodecs.imwrite(prefix + "b_hls_" + mills + ".png", hls, minCompressionParam);
             //}
 
             // Filter using HLS lower and upper range
@@ -380,6 +386,7 @@ public class Main {
                         writer.write("Mills: " + mills); writer.newLine();
                         writer.write("TargetSighted: false"); writer.newLine();
                         writer.write("TargetSighting: Absent"); writer.newLine();
+                        writer.write("Log: " + log.toString()); writer.newLine();
                         //Close writer
                         writer.close();
                     } catch(Exception e) {
