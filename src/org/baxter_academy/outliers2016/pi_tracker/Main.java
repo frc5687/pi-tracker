@@ -21,8 +21,8 @@ public class Main {
     private static double CENTER_Y = 239.5;
     private static double FOCAL = 543.25;
 
-    private static double CAMERA_HEIGHT = 4;
-    private static double TARGET_BOTTOM_HEIGHT = 84;
+    private static double CAMERA_HEIGHT = 15;
+    private static double TARGET_BOTTOM_HEIGHT = 83.5;
     private static double TARGET_HEIGHT = 14;
     private static double TARGET_WIDTH = 20;
     private static double CAMERA_ANGLE = 45.00;
