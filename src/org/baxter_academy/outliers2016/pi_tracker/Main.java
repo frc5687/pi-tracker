@@ -27,6 +27,8 @@ public class Main {
     private static double TARGET_WIDTH = 20;
     private static double CAMERA_ANGLE = 45.00;
 
+    public static final int piPort = 27002;
+    public static final int rioPort = 27001;
 
     public static void main(String[] args) {
         int camPort = 0;
@@ -99,6 +101,8 @@ public class Main {
         NetworkTable.setClientMode();
         NetworkTable.setTeam(team);
         NetworkTable.setIPAddress("10.56.87.02");
+
+        RobotProxy robot = new RobotProxy("10.56.87.02");
 
         // We want the robot code to always look in the same place for output, so we use the same path as GRIP
         NetworkTable tracking = NetworkTable.getTable("PITracker/tracking");
@@ -194,7 +198,12 @@ public class Main {
 
         int minArea = 20;
 
-        if (inputs.isConnected() && !inputs.containsKey("TARGET_WIDTH")) {
+        if (inputs.isConnected()) {
+            boolean logImages = inputs.getBoolean("LOG_IMAGES", false);
+            inputs.putBoolean("LOG_IMAGES", logImages);
+            inputs.setPersistent("LOG_IMAGES");
+
+
             inputs.putNumber("HLS_LOWER_H", lowerH);
             inputs.putNumber("HLS_LOWER_L", lowerL);
             inputs.putNumber("HLS_LOWER_S", lowerS);
@@ -227,6 +236,9 @@ public class Main {
         while (true) {
             StringBuilder log = new StringBuilder();
             long mills = Instant.now().toEpochMilli() - startMills;
+            long rioMillis = 0;
+            rioMillis = robot.getRobotTimestamp();
+
             if (false) {
 
                 lowerH = (int) inputs.getNumber("HLS_LOWER_H", lowerH);
@@ -248,11 +260,8 @@ public class Main {
                     exposure = newExposure;
                 }
             }
-            if (dashboard.isConnected()) {
-                images = dashboard.getBoolean("lights/ringlight", false);
-            } else {
-                images = true; // false;
-            }
+
+            images = robot.isRinglighton();
 
             // Capture a frame and write to disk
             camera.read(frame);
@@ -300,6 +309,9 @@ public class Main {
                 }
             }
 
+            if (tracking.isConnected()) {
+                tracking.putNumber("millis", rioMillis);
+            }
             if (biggest != null) {
                 // If we have one, find the bounding rectangle
                 final Rect rect = Imgproc.boundingRect(biggest);
@@ -323,6 +335,8 @@ public class Main {
                 final double distance = getDistance(verticalAngle);
 
 
+
+                robot.Send(rioMillis, true, offsetAngle, distance);
 
                 if (tracking.isConnected()) {
                     // Send it all to NetworkTables
@@ -367,6 +381,7 @@ public class Main {
                 }
 
             } else {
+                robot.Send(rioMillis, false, 0, 0);
                 if (tracking.isConnected()) {
                     // Send it all to NetworkTables
                     tracking.putBoolean("TargetSighted", false);
