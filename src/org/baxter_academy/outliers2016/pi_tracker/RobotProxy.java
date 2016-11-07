@@ -12,17 +12,19 @@ import java.net.InetAddress;
 public class RobotProxy {
     private long robotTimestamp = 0;
     private boolean ringlighton = false;
-    private InetAddress robotAddress;
     DatagramSocket outgoingSocket;
 
-    public static final int piPort = 27002;
-    public static final int rioPort = 27001;
+    private InetAddress _robotAddress;
+    private int _piPort = 27002;
+    private int _rioPort = 27001;
 
     private RobotThread robotThread;
 
-    public RobotProxy(String robotAddress) {
+    public RobotProxy(String robotAddress, int piPort, int rioPort) {
         try {
-            this.robotAddress = InetAddress.getByName(robotAddress);
+            _robotAddress = InetAddress.getByName(robotAddress);
+            _piPort = piPort;
+            _rioPort = rioPort;
             outgoingSocket = new DatagramSocket();
         } catch (Exception e) {
         }
@@ -34,7 +36,7 @@ public class RobotProxy {
     }
 
     public void Send(long rioMillis, boolean isSighted, double offsetAngle, double distance) {
-        if (robotAddress!=null) {
+        if (_robotAddress!=null) {
             StringBuilder buffer = new StringBuilder();
             buffer.append(Long.toString(rioMillis));
             buffer.append(";");
@@ -48,9 +50,11 @@ public class RobotProxy {
             buffer.append(Double.toString(distance));
             buffer.append(";");
 
+            System.out.println("Sending packet to roboRio " + _robotAddress.toString() + ":" + Integer.toString(_rioPort) + " " + buffer.toString());
+
             byte[] sendData = new byte[1024];
             sendData = buffer.toString().getBytes();
-            DatagramPacket sendPacket = new DatagramPacket(sendData, buffer.length(), robotAddress, rioPort);
+            DatagramPacket sendPacket = new DatagramPacket(sendData, buffer.length(), _robotAddress, _rioPort);
             try {
                 outgoingSocket.send(sendPacket);
             } catch (IOException ioe) {
@@ -88,7 +92,7 @@ public class RobotProxy {
             DatagramSocket incomingSocket;
             byte[] receiveData = new byte[1024];
             try {
-                incomingSocket = new DatagramSocket(piPort);
+                incomingSocket = new DatagramSocket(_piPort);
                 while (true) {
                     DatagramPacket receivePacket = new DatagramPacket(receiveData, receiveData.length);
                     incomingSocket.receive(receivePacket);

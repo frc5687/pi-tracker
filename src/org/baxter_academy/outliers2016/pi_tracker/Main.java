@@ -4,7 +4,6 @@ import org.opencv.core.*;
 import org.opencv.imgcodecs.Imgcodecs;
 import org.opencv.imgproc.Imgproc;
 import org.opencv.videoio.VideoCapture;
-import edu.wpi.first.wpilibj.networktables.NetworkTable;
 
 import java.io.BufferedWriter;
 import java.io.File;
@@ -33,7 +32,8 @@ public class Main {
     public static void main(String[] args) {
         int camPort = 0;
         double exposure = .25;
-        int team = 5687;
+        String team = null;
+        String address = null;
         boolean logging = false;
         boolean images = false;
         int rX = 0;
@@ -65,7 +65,7 @@ public class Main {
                         break;
                     case "team":
                         try {
-                            team = Integer.parseInt(a[1]);
+                            team = a[1];
                         } catch (Exception e) {
                             e.printStackTrace();
                         }
@@ -88,26 +88,36 @@ public class Main {
                             e.printStackTrace();
                         }
                         break;
+                    case "address":
+                    case "addr":
+                    case "a":
+                        try {
+                            address = a[1];
+                        } catch (Exception e) {
+                            e.printStackTrace();
+                        }
+                        break;
                 }
             }
         }
 
         System.out.println(String.format("Camera port set to %1$d", camPort));
-        System.out.println(String.format("Team set to %1$d", team));
+        if (team!=null) {
+            System.out.println(String.format("Team set to %1$s", team));
+        }
         System.out.println(String.format("Logging set to %1$b", logging));
         System.out.println(String.format("Images set to %1$b", images));
 
+        if (address==null && team!=null) {
+            address = String.format("roboRIO-%1$s-FRC.local", team);
+        }
+        System.out.println(String.format("Address set to %1$s", address));
+
         // Initialize the NetworkTable library with team information
-        NetworkTable.setClientMode();
-        NetworkTable.setTeam(team);
-        NetworkTable.setIPAddress("10.56.87.02");
 
-        RobotProxy robot = new RobotProxy("10.56.87.02");
+        RobotProxy robot = new RobotProxy(address, piPort, rioPort);
 
-        // We want the robot code to always look in the same place for output, so we use the same path as GRIP
-        NetworkTable tracking = NetworkTable.getTable("PITracker/tracking");
-        NetworkTable inputs = NetworkTable.getTable("PITracker/inputs");
-        NetworkTable dashboard = NetworkTable.getTable("SmartDashboard");
+        robot.Send(0, false, 0, 0);
 
         // Initialize OpenCV
         System.out.println("Loading OpenCV...");
@@ -156,25 +166,7 @@ public class Main {
 
 
         int retry = 240;
-        while (!tracking.isConnected() && retry > 0) {
-            retry--;
-            try {
-                Thread.sleep(1000);
-            } catch (InterruptedException ie) {
-                break;
-            }
-        }
 
-
-        if (tracking.isConnected()) {
-            // Send it all to NetworkTables
-            try {
-                tracking.putString("Address", getFirstNonLoopbackAddress(true, false).getHostAddress());
-            } catch (Exception e) {
-            }
-            tracking.putNumber("Folder", folderNumber);
-            tracking.putNumber("Start Time: ", startMills);
-        }
 
 
 
@@ -198,31 +190,6 @@ public class Main {
 
         int minArea = 20;
 
-        if (inputs.isConnected()) {
-            boolean logImages = inputs.getBoolean("LOG_IMAGES", false);
-            inputs.putBoolean("LOG_IMAGES", logImages);
-            inputs.setPersistent("LOG_IMAGES");
-
-
-            inputs.putNumber("HLS_LOWER_H", lowerH);
-            inputs.putNumber("HLS_LOWER_L", lowerL);
-            inputs.putNumber("HLS_LOWER_S", lowerS);
-
-            inputs.putNumber("HLS_UPPER_H", upperH);
-            inputs.putNumber("HLS_UPPER_L", upperL);
-            inputs.putNumber("HLS_UPPER_S", upperS);
-
-            inputs.putNumber("MIN_AREA", minArea);
-
-            inputs.setPersistent("HLS_LOWER_H");
-            inputs.setPersistent("HLS_LOWER_L");
-            inputs.setPersistent("HLS_LOWER_S");
-            inputs.setPersistent("HLS_UPPER_H");
-            inputs.setPersistent("HLS_UPPER_L");
-            inputs.setPersistent("HLS_UPPER_S");
-
-            inputs.setPersistent("MIN_AREA");
-        }
 
         boolean first=true;
         Mat frame = new Mat();
@@ -238,28 +205,6 @@ public class Main {
             long mills = Instant.now().toEpochMilli() - startMills;
             long rioMillis = 0;
             rioMillis = robot.getRobotTimestamp();
-
-            if (false) {
-
-                lowerH = (int) inputs.getNumber("HLS_LOWER_H", lowerH);
-                lowerL = (int) inputs.getNumber("HLS_LOWER_L", lowerL);
-                lowerS = (int) inputs.getNumber("HLS_LOWER_S", lowerS);
-
-                upperH = (int) inputs.getNumber("HLS_UPPER_H", upperH);
-                upperL = (int) inputs.getNumber("HLS_UPPER_L", upperL);
-                upperS = (int) inputs.getNumber("HLS_UPPER_S", upperS);
-
-                minArea = (int) inputs.getNumber("MIN_AREA", minArea);
-
-                double newExposure = (double) inputs.getNumber("EXPOSURE", exposure);
-                if (newExposure != exposure) {
-                    if (logging) {
-                        System.out.println(String.format("Resetting exposure to %1$f", newExposure));
-                    }
-                    camera.set(15, newExposure);
-                    exposure = newExposure;
-                }
-            }
 
             images = robot.isRinglighton();
 
@@ -309,9 +254,6 @@ public class Main {
                 }
             }
 
-            if (tracking.isConnected()) {
-                tracking.putNumber("millis", rioMillis);
-            }
             if (biggest != null) {
                 // If we have one, find the bounding rectangle
                 final Rect rect = Imgproc.boundingRect(biggest);
@@ -338,20 +280,6 @@ public class Main {
 
                 robot.Send(rioMillis, true, offsetAngle, distance);
 
-                if (tracking.isConnected()) {
-                    // Send it all to NetworkTables
-                    tracking.putNumber("Mills", mills);
-                    tracking.putBoolean("TargetSighted", true);
-                    tracking.putString("TargetSighting", "Sighted");
-                    tracking.putNumber("width", width);
-                    tracking.putNumber("height", rect.height);
-                    tracking.putNumber("centerX", cx);
-                    tracking.putNumber("centerY", cy);
-                    tracking.putNumber("offsetAngle", offsetAngle);
-                    tracking.putNumber("distance", distance);
-
-
-                }
 
                 if (logging) {
                     System.out.println(String.format("cx=%1$f, cy=%2$f, offsetAngle=%3$f, distance=%4$f", cx, cy, offsetAngle, distance));
@@ -382,11 +310,6 @@ public class Main {
 
             } else {
                 robot.Send(rioMillis, false, 0, 0);
-                if (tracking.isConnected()) {
-                    // Send it all to NetworkTables
-                    tracking.putBoolean("TargetSighted", false);
-                    tracking.putString("TargetSighting", "Absent");
-                }
                 if (logging) {
                     System.out.println(String.format("Target absent."));
                 }
